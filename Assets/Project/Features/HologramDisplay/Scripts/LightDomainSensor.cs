@@ -4,8 +4,13 @@ public class LightDomainSensor
 {
     private float _luxThreshold = 50;
 
-    public bool Detect(float measuredLux)
+    public bool DetectLux(float measured)
     {
-        return measuredLux >= _luxThreshold;
+        return measured >= _luxThreshold;
+    }
+
+    public bool DetectBrightness(float measured)
+    {
+        return (measured >= 0.85) && (measured <= 1);
     }
 }

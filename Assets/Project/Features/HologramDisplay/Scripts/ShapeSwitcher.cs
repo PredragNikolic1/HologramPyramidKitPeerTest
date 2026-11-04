@@ -29,11 +29,10 @@ public class ShapeSwitcher : MonoBehaviour
 
     private SoundSensor _soundSensor;
     public bool _hasSoundOccured;
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID||UNITY_WEBGL) && !UNITY_EDITOR
      //keep value display logic for future debugging
      private LightDomainSensor _lightSensor;
-     private AndroidMicrophoneInputHandler _androidMicrophone;
-     private AndroidLightInputHandler _androidLightInput;
+     private IMicrophoneInputHandler _microphoneInputHandler;
      private float peak, rms;
      private float heldPeak, heldRms, holdTimer, crest, crestAtPeak;
      private const float GATE = 0.17f;
@@ -44,8 +43,18 @@ public class ShapeSwitcher : MonoBehaviour
      private ClapSensor _clapSensor;
      private bool _hasClapOccured = false;
      private bool _hasBlowOccured = false;
-     private float luxMeasured;
 #endif
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+    private AndroidLightInputHandler _androidLightInput;
+    private float luxMeasured;
+#endif
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+    private WebLightInputHandler _webLightInput;
+    private float brightness;
+#endif
+
 
     public void SetShapes(List<GameObject> shapes)
     {
@@ -67,12 +76,18 @@ public class ShapeSwitcher : MonoBehaviour
         Show(0);
         SetSpinning(spinning);
         _soundSensor = new SoundSensor(soundThreshold, soundCooldownSeconds);
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID||UNITY_WEBGL) && !UNITY_EDITOR
         _lightSensor = new LightDomainSensor();
-        _androidMicrophone = new AndroidMicrophoneInputHandler();
         _blowSensor = new BlowSensor();
-        _clapSensor = new ClapSensor();
+        _clapSensor = new ClapSensor();       
+#endif
+#if UNITY_ANDROID && !UNITY_EDITOR
+        _microphoneInputHandler = new AndroidMicrophoneInputHandler();
         _androidLightInput = new AndroidLightInputHandler();
+#endif
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+        _webLightInput = new WebLightInputHandler();
 #endif
         _hasSoundOccured = false;
     }
@@ -143,7 +158,7 @@ public class ShapeSwitcher : MonoBehaviour
         Rect shapeRect = new Rect(margin, Screen.height - height - margin, width, height);
         Rect spinRect = new Rect(Screen.width - width - margin, Screen.height - height - margin, width, height);
 
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID||UNITY_WEBGL) && !UNITY_EDITOR
         //keep value display logic for future debugging
         GUI.skin.label.fontSize = 50;
         GUILayout.Label($"Peak: {peak:F3}   (max 2s: {heldPeak:F3})");
@@ -152,7 +167,14 @@ public class ShapeSwitcher : MonoBehaviour
         GUILayout.Label($"Last duration: {lastDuration:F3} s");
         GUILayout.Label($"is Clap: {_hasClapOccured}");
         GUILayout.Label($"is Blow: {_hasBlowOccured}");
-        GUILayout.Label($"Lux: {luxMeasured}");
+#endif
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+    GUILayout.Label($"Lux: {luxMeasured}");
+#endif
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+    GUILayout.Label($"Brightness: {brightness}");
 #endif
         // Shape Button (Klick führt NextShape aus)
         if (GUI.Button(shapeRect, shapes[current].name, buttonStyle))
@@ -190,11 +212,10 @@ public class ShapeSwitcher : MonoBehaviour
         _hasSoundOccured = _soundSensor.Sense();
 
         bool hasLightTrigger = false;
-#if UNITY_ANDROID && !UNITY_EDITOR
-        peak = _androidMicrophone.MeasureLoudness();
-        rms = _androidMicrophone.LastRms;
+#if (UNITY_ANDROID||UNITY_WEBGL) && !UNITY_EDITOR
+        peak = _microphoneInputHandler.MeasureLoudness();
+        rms = _microphoneInputHandler.GetLastRms();
         crest = peak / Mathf.Max(rms, 0.0001f);
-        luxMeasured = _androidLightInput.MeasureLux();
 
         //keep value display logic for future debugging
         bool gateOpen = rms > GATE;
@@ -224,8 +245,16 @@ public class ShapeSwitcher : MonoBehaviour
             crestAtPeak = crest;
         heldPeak = Mathf.Max(heldPeak, peak);
         heldRms  = Mathf.Max(heldRms, rms);
+#endif
 
-        hasLightTrigger = _lightSensor.Detect(luxMeasured);
+#if UNITY_ANDROID && !UNITY_EDITOR
+        luxMeasured = _androidLightInput.MeasureLux();
+        hasLightTrigger = _lightSensor.DetectLux(luxMeasured);
+#endif
+
+#if UNITY_WEBGL && !UNITY_EDITOR
+        brightness = _webLightInput.MeasureBrightness();
+        hasLightTrigger = _lightSensor.DetectBrightness(brightness);
 #endif
 
 
@@ -257,7 +286,7 @@ public class ShapeSwitcher : MonoBehaviour
 
         //Only Candle Reacts to input
 
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID||UNITY_WEBGL) && !UNITY_EDITOR
     CandleAnimationScript animationScript = shapes[current].GetComponentInChildren<CandleAnimationScript>();
 
         if ((animationScript != null))
