@@ -4,7 +4,8 @@ var WebMicrophone = {
     $WebMicrophoneState: {
         context: null,
         analyser: null,
-        samples: null
+        samples: null,
+        rms: 0
     },
 
     WebMicrophone_Start: function () {
@@ -13,7 +14,7 @@ var WebMicrophone = {
         }
 
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            console.warn("[SoundSensor] The browser does not allow microphone access. The page has to be opened over https or localhost.");
+            console.warn("[WebMicrophone] The browser does not allow microphone access. The page has to be opened over https or localhost.");
             return;
         }
 
@@ -29,7 +30,7 @@ var WebMicrophone = {
             var AudioContextType = window.AudioContext || window.webkitAudioContext;
             var context = new AudioContextType();
             var analyser = context.createAnalyser();
-            analyser.fftSize = 2048;
+            analyser.fftSize = 1024;
             context.createMediaStreamSource(stream).connect(analyser);
 
             WebMicrophoneState.context = context;
@@ -51,11 +52,19 @@ var WebMicrophone = {
         });
     },
 
+    //1 if the microphone is running, 0 otherwise (no permission yet, or waiting for a click).
+    WebMicrophone_IsReady: function () {
+        var state = WebMicrophoneState;
+        return (state.analyser && state.context.state === "running") ? 1 : 0;
+    },
+
     //Peak level (0 to 1) of the newest samples, 0 while the microphone is not ready.
+    //Also computes the RMS of the same samples, read it afterwards with WebMicrophone_GetRms.
     WebMicrophone_GetLoudness: function () {
         var analyser = WebMicrophoneState.analyser;
 
         if (!analyser || WebMicrophoneState.context.state !== "running") {
+            WebMicrophoneState.rms = 0;
             return 0;
         }
 
@@ -63,11 +72,18 @@ var WebMicrophone = {
         analyser.getFloatTimeDomainData(samples);
 
         var loudness = 0;
+        var sumOfSquares = 0;
         for (var i = 0; i < samples.length; i++) {
             loudness = Math.max(loudness, Math.abs(samples[i]));
+            sumOfSquares += samples[i] * samples[i];
         }
+        WebMicrophoneState.rms = Math.sqrt(sumOfSquares / samples.length);
 
         return loudness;
+    },
+    //RMS (0 to 1) of the samples read by the last WebMicrophone_GetLoudness call.
+    WebMicrophone_GetRms: function () {
+        return WebMicrophoneState.rms;
     }
 };
 
