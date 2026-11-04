@@ -31,8 +31,9 @@ public class ShapeSwitcher : MonoBehaviour
     public bool _hasSoundOccured;
 #if UNITY_ANDROID && !UNITY_EDITOR
      //keep value display logic for future debugging
-     private LightReaderSensor _lightSensor;
+     private LightDomainSensor _lightSensor;
      private AndroidMicrophoneInputHandler _androidMicrophone;
+     private AndroidLightInputHandler _androidLightInput;
      private float peak, rms;
      private float heldPeak, heldRms, holdTimer, crest, crestAtPeak;
      private const float GATE = 0.17f;
@@ -43,6 +44,7 @@ public class ShapeSwitcher : MonoBehaviour
      private ClapSensor _clapSensor;
      private bool _hasClapOccured = false;
      private bool _hasBlowOccured = false;
+     private float luxMeasured;
 #endif
 
     public void SetShapes(List<GameObject> shapes)
@@ -66,10 +68,11 @@ public class ShapeSwitcher : MonoBehaviour
         SetSpinning(spinning);
         _soundSensor = new SoundSensor(soundThreshold, soundCooldownSeconds);
 #if UNITY_ANDROID && !UNITY_EDITOR
-        _lightSensor = new LightReaderSensor();
+        _lightSensor = new LightDomainSensor();
         _androidMicrophone = new AndroidMicrophoneInputHandler();
         _blowSensor = new BlowSensor();
         _clapSensor = new ClapSensor();
+        _androidLightInput = new AndroidLightInputHandler();
 #endif
         _hasSoundOccured = false;
     }
@@ -149,6 +152,7 @@ public class ShapeSwitcher : MonoBehaviour
         GUILayout.Label($"Last duration: {lastDuration:F3} s");
         GUILayout.Label($"is Clap: {_hasClapOccured}");
         GUILayout.Label($"is Blow: {_hasBlowOccured}");
+        GUILayout.Label($"Lux: {luxMeasured}");
 #endif
         // Shape Button (Klick führt NextShape aus)
         if (GUI.Button(shapeRect, shapes[current].name, buttonStyle))
@@ -187,10 +191,10 @@ public class ShapeSwitcher : MonoBehaviour
 
         bool hasLightTrigger = false;
 #if UNITY_ANDROID && !UNITY_EDITOR
-        hasLightTrigger = _lightSensor.Detect();
         peak = _androidMicrophone.MeasureLoudness();
         rms = _androidMicrophone.LastRms;
         crest = peak / Mathf.Max(rms, 0.0001f);
+        luxMeasured = _androidLightInput.MeasureLux();
 
         //keep value display logic for future debugging
         bool gateOpen = rms > GATE;
@@ -220,6 +224,8 @@ public class ShapeSwitcher : MonoBehaviour
             crestAtPeak = crest;
         heldPeak = Mathf.Max(heldPeak, peak);
         heldRms  = Mathf.Max(heldRms, rms);
+
+        hasLightTrigger = _lightSensor.Detect(luxMeasured);
 #endif
 
 

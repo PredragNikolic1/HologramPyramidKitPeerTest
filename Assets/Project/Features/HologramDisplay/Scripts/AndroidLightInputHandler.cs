@@ -30,7 +30,7 @@ public class AndroidLightInputHandler
         if (!TryEnable())
         {
             Debug.Log("[LIGHT] No LightSensor found");
-            return false;
+            return -1.0f;
         }
 
         return LightSensor.current.lightLevel.ReadValue();

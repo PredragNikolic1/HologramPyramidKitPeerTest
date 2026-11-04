@@ -1,6 +1,6 @@
 ﻿using System;
 
-public class LightSensor
+public class LightDomainSensor
 {
     private float _luxThreshold = 50;
 
