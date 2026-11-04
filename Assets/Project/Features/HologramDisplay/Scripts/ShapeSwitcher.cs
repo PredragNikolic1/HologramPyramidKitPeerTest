@@ -88,6 +88,7 @@ public class ShapeSwitcher : MonoBehaviour
 
 #if UNITY_WEBGL && !UNITY_EDITOR
         _webLightInput = new WebLightInputHandler();
+        _microphoneInputHandler = new WebMicrophoneInputHandler();
 #endif
         _hasSoundOccured = false;
     }
