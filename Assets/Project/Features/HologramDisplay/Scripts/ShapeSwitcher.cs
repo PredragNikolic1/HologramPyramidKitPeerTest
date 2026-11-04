@@ -78,17 +78,18 @@ public class ShapeSwitcher : MonoBehaviour
         _soundSensor = new SoundSensor(soundThreshold, soundCooldownSeconds);
 #if (UNITY_ANDROID||UNITY_WEBGL) && !UNITY_EDITOR
         _lightSensor = new LightDomainSensor();
-        _blowSensor = new BlowSensor();
-        _clapSensor = new ClapSensor();       
+        _blowSensor = new BlowSensor();      
 #endif
 #if UNITY_ANDROID && !UNITY_EDITOR
         _microphoneInputHandler = new AndroidMicrophoneInputHandler();
         _androidLightInput = new AndroidLightInputHandler();
+        _clapSensor = new ClapSensor(0.5f); 
 #endif
 
 #if UNITY_WEBGL && !UNITY_EDITOR
         _webLightInput = new WebLightInputHandler();
         _microphoneInputHandler = new WebMicrophoneInputHandler();
+        _clapSensor = new ClapSensor(0.05f); 
 #endif
         _hasSoundOccured = false;
     }
@@ -241,6 +242,7 @@ public class ShapeSwitcher : MonoBehaviour
         // sensors decide, every frame
         _hasClapOccured = _clapSensor.Detect(soundStarted, isLoud, soundEnded, peak, rms, lastDuration, gate);
         _hasBlowOccured = _blowSensor.Detect(soundStarted, isLoud, soundEnded, rms, lastDuration, gate);
+        _hasSoundOccured = _hasClapOccured;
 
         holdTimer -= Time.deltaTime;
         if (holdTimer <= 0f) { heldPeak = 0f; heldRms = 0f; holdTimer = 2f; }
