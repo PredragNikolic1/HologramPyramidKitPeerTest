@@ -3,7 +3,6 @@ using UnityEngine;
 
 public class ClapSensor
 {
-    private const float GATE = 0.17f;
     private const float CLAP_MAX_DURATION_IN_SECONDS = 0.07f;
     private const float CLAP_MIN_PEAK = 0.5f;
 
@@ -11,7 +10,7 @@ public class ClapSensor
 
     // call EVERY frame
     public bool Detect(bool soundStarted, bool isLoud, bool soundEnded,
-                       float peak, float rms, float durationInSeconds)
+                       float peak, float rms, float durationInSeconds, float gate)
     {
         if (soundStarted)
         {
@@ -28,6 +27,6 @@ public class ClapSensor
         return soundEnded
             && durationInSeconds <= CLAP_MAX_DURATION_IN_SECONDS
             && maxPeak >= CLAP_MIN_PEAK
-            && maxRms >= GATE;
+            && maxRms >= gate;
     }
 }

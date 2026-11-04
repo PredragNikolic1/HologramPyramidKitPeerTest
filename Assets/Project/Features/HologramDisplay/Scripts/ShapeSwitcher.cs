@@ -35,7 +35,7 @@ public class ShapeSwitcher : MonoBehaviour
      private IMicrophoneInputHandler _microphoneInputHandler;
      private float peak, rms;
      private float heldPeak, heldRms, holdTimer, crest, crestAtPeak;
-     private const float GATE = 0.17f;
+     private float gate = 0.17f;  
      private bool isLoud = false;
      private float loudStartTime;
      private float lastDuration; 
@@ -168,6 +168,8 @@ public class ShapeSwitcher : MonoBehaviour
         GUILayout.Label($"Last duration: {lastDuration:F3} s");
         GUILayout.Label($"is Clap: {_hasClapOccured}");
         GUILayout.Label($"is Blow: {_hasBlowOccured}");
+        GUILayout.Label($"Gate: {gate:F3}");
+        gate = GUILayout.HorizontalSlider(gate, 0.001f, 0.5f, GUILayout.Width(400));
 #endif
 
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -219,7 +221,7 @@ public class ShapeSwitcher : MonoBehaviour
         crest = peak / Mathf.Max(rms, 0.0001f);
 
         //keep value display logic for future debugging
-        bool gateOpen = rms > GATE;
+        bool gateOpen = rms > gate;
         bool soundStarted = false;
         bool soundEnded = false;
 
@@ -237,8 +239,8 @@ public class ShapeSwitcher : MonoBehaviour
             }
 
         // sensors decide, every frame
-        _hasClapOccured = _clapSensor.Detect(soundStarted, isLoud, soundEnded, peak, rms, lastDuration);
-        _hasBlowOccured = _blowSensor.Detect(soundStarted, isLoud, soundEnded, rms, lastDuration);
+        _hasClapOccured = _clapSensor.Detect(soundStarted, isLoud, soundEnded, peak, rms, lastDuration, gate);
+        _hasBlowOccured = _blowSensor.Detect(soundStarted, isLoud, soundEnded, rms, lastDuration, gate);
 
         holdTimer -= Time.deltaTime;
         if (holdTimer <= 0f) { heldPeak = 0f; heldRms = 0f; holdTimer = 2f; }
