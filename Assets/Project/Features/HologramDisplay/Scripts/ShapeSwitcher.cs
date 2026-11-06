@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEditor.Search;
 using UnityEngine;
 
 public class ShapeSwitcher : MonoBehaviour
@@ -38,6 +39,10 @@ public class ShapeSwitcher : MonoBehaviour
     private ShapeSwitchUI _shapeSwitchUI;
 
      private SensorDebugUI _debugUI;
+
+    private ShapeReactionDispatcher _dispatcher;
+
+    private SensorContext _sensorContext;
      private bool _hasClapOccured = false;
      private bool _hasBlowOccured = false;
 
@@ -74,6 +79,8 @@ public class ShapeSwitcher : MonoBehaviour
         _shapeSwitchUI = new ShapeSwitchUI(this);
         _lightSensor = new LightDomainSensor();
         _blowSensor = new BlowSensor();
+        _dispatcher = new ShapeReactionDispatcher();
+        _sensorContext = new SensorContext();
 #if UNITY_ANDROID && !UNITY_EDITOR
         _microphoneInputHandler = new AndroidMicrophoneInputHandler();
         _androidLightInput = new AndroidLightInputHandler();
@@ -212,55 +219,11 @@ public class ShapeSwitcher : MonoBehaviour
         hasLightTrigger = _lightSensor.DetectBrightness(brightness);
 #endif
 
+        _sensorContext.HasBlow = _hasBlowOccured;
+        _sensorContext.HasClap = _hasClapOccured;
+        _sensorContext.HasLight = hasLightTrigger;
 
-        //Only the balloon reacts to sounds, it pops.
-        BalloonPopper balloon = shapes[current].GetComponentInChildren<BalloonPopper>();
-
-        if (_hasSoundOccured && (balloon != null))
-        {
-            balloon.Pop();
-        }
-
-        //Only Sensortest
-
-        SensorTestScript sensorTest = shapes[current].GetComponentInChildren<SensorTestScript>();
-
-        if ((sensorTest != null))
-        {
-
-            if (_hasSoundOccured)
-            {
-                sensorTest.switchBetween();
-            }
-
-            else if (hasLightTrigger)
-            {
-                sensorTest.setColorToYellow();
-            }
-        }
-
-        //Only Candle Reacts to input
-
-    CandleAnimationScript animationScript = shapes[current].GetComponentInChildren<CandleAnimationScript>();
-
-        if ((animationScript != null))
-        {
-            animationScript.Animate(hasLightTrigger,_hasBlowOccured);
-        }
-        else
-        {
-            Debug.LogWarning("[CANDLE] No CandleAnimationScript found on " + shapes[current].name);
-        }
-
-
-        AnimationCycler cycler = shapes[current].GetComponentInChildren<AnimationCycler>();
-        if (cycler != null && cycler.states.Length > 1)
-        {
-
-            if (_cycleNextPressed)
-            {
-                cycler.Next();
-            }
-        }
+        
+        _dispatcher.Dispatch(_sensorContext, shapes[current], _cycleNextPressed);
     }
 }
