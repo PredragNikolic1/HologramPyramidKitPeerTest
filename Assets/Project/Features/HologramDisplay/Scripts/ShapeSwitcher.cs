@@ -11,11 +11,6 @@ public class ShapeSwitcher : MonoBehaviour
     public bool spinning = true;
 
 
-    [Header("Buttons")]
-    public float buttonWidthCm = 3.5f;
-    public float buttonHeightCm = 1f;
-    public float buttonMarginCm = 0.3f;
-
     [Header("Sound")]
     [Tooltip("Peak level (0 to 1) the microphone has to reach to count as a loud sound.")]
     [Range(0f, 1f)]
@@ -25,7 +20,6 @@ public class ShapeSwitcher : MonoBehaviour
     public float soundCooldownSeconds = 0.3f;
 
     private int current = 0;
-    private GUIStyle buttonStyle;
 
     public bool _hasSoundOccured;
 
@@ -40,6 +34,8 @@ public class ShapeSwitcher : MonoBehaviour
      private float lastDuration; 
      private BlowSensor _blowSensor;
      private ClapSensor _clapSensor;
+
+    private ShapeSwitchUI _shapeSwitchUI;
 
      private SensorDebugUI _debugUI;
      private bool _hasClapOccured = false;
@@ -75,6 +71,7 @@ public class ShapeSwitcher : MonoBehaviour
         }
         Show(0);
         SetSpinning(spinning);
+        _shapeSwitchUI = new ShapeSwitchUI(this);
         _lightSensor = new LightDomainSensor();
         _blowSensor = new BlowSensor();
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -124,7 +121,7 @@ public class ShapeSwitcher : MonoBehaviour
         Show(nextIndex);
     }
 
-    void SetSpinning(bool value)
+    public void SetSpinning(bool value)
     {
         spinning = value;
 
@@ -139,6 +136,11 @@ public class ShapeSwitcher : MonoBehaviour
         }
     }
 
+    public string getCurrentShapeName()
+    {
+        return shapes[current].name;
+    }
+
     void OnGUI()
     {
         if (shapes == null || shapes.Count == 0 || current >= shapes.Count || shapes[current] == null)
@@ -146,49 +148,16 @@ public class ShapeSwitcher : MonoBehaviour
             return;
         }
 
-        // DPI Fallback für korrekte Button-Größe im Editor
-        float dpi = Screen.dpi > 0 ? Screen.dpi : 96f;
-        float pixelsPerCm = dpi / 2.54f;
-
-        float width = buttonWidthCm * pixelsPerCm;
-        float height = buttonHeightCm * pixelsPerCm;
-        float margin = buttonMarginCm * pixelsPerCm;
-
-        if (buttonStyle == null)
-        {
-            buttonStyle = new GUIStyle(GUI.skin.button);
-            buttonStyle.alignment = TextAnchor.MiddleCenter;
-        }
-        buttonStyle.fontSize = Mathf.RoundToInt(height * 0.35f);
-
-        Rect shapeRect = new Rect(margin, Screen.height - height - margin, width, height);
-        Rect spinRect = new Rect(Screen.width - width - margin, Screen.height - height - margin, width, height);
-
-        _debugUI.Draw(peak, heldPeak, rms, heldRms, crest, crestAtPeak, lastDuration, _hasClapOccured, _hasBlowOccured, isLoud, gate, brightness);
-#if UNITY_ANDROID && !UNITY_EDITOR
-    GUILayout.Label($"Lux: {luxMeasured}");
-#endif
-        // Shape Button (Klick führt NextShape aus)
-        if (GUI.Button(shapeRect, shapes[current].name, buttonStyle))
-        {
-            NextShape();
-        }
-
-        // Spin Button
-        if (GUI.Button(spinRect, spinning ? "Spin: On" : "Spin: Off", buttonStyle))
-        {
-            SetSpinning(!spinning);
-        }
-
         // Animation Button, nur für Formen mit mehreren Animationen (z.B. die Katze), über dem Shape Button
         AnimationCycler cycler = shapes[current].GetComponentInChildren<AnimationCycler>();
 
-        if (cycler != null && cycler.states.Length > 1)
-        {
-            Rect animationRect = new Rect(margin, shapeRect.y - height - margin, width, height);
+        _debugUI.Draw(peak, heldPeak, rms, heldRms, crest, crestAtPeak, lastDuration, _hasClapOccured, _hasBlowOccured, isLoud, gate, brightness);
 
-            _cycleNextPressed = GUI.Button(animationRect, cycler.CurrentState, buttonStyle);
-        }
+#if UNITY_ANDROID && !UNITY_EDITOR
+    GUILayout.Label($"Lux: {luxMeasured}");
+#endif
+
+        _shapeSwitchUI.Draw(cycler, spinning);
     }
 
     public void RunSensor()
