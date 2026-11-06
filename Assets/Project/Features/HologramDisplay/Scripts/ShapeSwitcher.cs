@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using UnityEditor.Search;
 using UnityEngine;
 
 public class ShapeSwitcher : MonoBehaviour
@@ -31,9 +30,7 @@ public class ShapeSwitcher : MonoBehaviour
      private float heldPeak, heldRms, holdTimer, crest, crestAtPeak;
      private float gate = 0.17f;  
      private bool isLoud = false;
-     private float loudStartTime;
      private float lastDuration; 
-     private BlowSensor _blowSensor;
      private ClapSensor _clapSensor;
 
     private ShapeSwitchUI _shapeSwitchUI;
@@ -45,6 +42,8 @@ public class ShapeSwitcher : MonoBehaviour
     private SensorContext _sensorContext;
      private bool _hasClapOccured = false;
      private bool _hasBlowOccured = false;
+
+    private SensorHandler _sensorHandler;
 
     private bool _cycleNextPressed = false;
 
@@ -77,28 +76,23 @@ public class ShapeSwitcher : MonoBehaviour
         Show(0);
         SetSpinning(spinning);
         _shapeSwitchUI = new ShapeSwitchUI(this);
-        _lightSensor = new LightDomainSensor();
-        _blowSensor = new BlowSensor();
         _dispatcher = new ShapeReactionDispatcher();
         _sensorContext = new SensorContext();
+        _sensorHandler = SensorHandler.CreateHandler();
 #if UNITY_ANDROID && !UNITY_EDITOR
         _microphoneInputHandler = new AndroidMicrophoneInputHandler();
         _androidLightInput = new AndroidLightInputHandler();
-        _clapSensor = new ClapSensor(0.5f); 
 #endif
 
 #if UNITY_WEBGL && !UNITY_EDITOR
         _webLightInput = new WebLightInputHandler();
         _microphoneInputHandler = new WebMicrophoneInputHandler();
-        _clapSensor = new ClapSensor(0.05f);
 #endif
 
 #if UNITY_EDITOR
         _webLightInput = new WebLightInputHandler();
         _microphoneInputHandler = new EditorMicrophoneInputHandler();
-        _clapSensor = new ClapSensor(0.05f);
 #endif
-        _hasSoundOccured = false;
         _debugUI = new SensorDebugUI();
     }
 
@@ -169,39 +163,27 @@ public class ShapeSwitcher : MonoBehaviour
 
     public void RunSensor()
     {
-        if (_clapSensor == null || shapes == null || current >= shapes.Count || shapes[current] == null)
+        if (_sensorHandler == null || shapes == null || current >= shapes.Count || shapes[current] == null)
         {
             return;
         }
 
-        bool hasLightTrigger = false;
+        //Measurements
         peak = _microphoneInputHandler.MeasureLoudness();
         rms = _microphoneInputHandler.GetLastRms();
         crest = peak / Mathf.Max(rms, 0.0001f);
 
-        //keep value display logic for future debugging
-        bool gateOpen = rms > gate;
-        bool soundStarted = false;
-        bool soundEnded = false;
+#if UNITY_ANDROID && !UNITY_EDITOR
+        luxMeasured = _androidLightInput.MeasureLux();
+#endif
 
-        if (gateOpen && !isLoud)
-            {
-                loudStartTime = Time.time;
-                isLoud = true;
-                soundStarted = true;
-            }
-        else if (!gateOpen && isLoud)
-            {
-                lastDuration = Time.time - loudStartTime;
-                isLoud = false;
-                soundEnded = true;
-            }
+#if UNITY_WEBGL || UNITY_EDITOR
+        brightness = _webLightInput.MeasureBrightness();
+#endif
 
-        // sensors decide, every frame
-        _hasClapOccured = _clapSensor.Detect(soundStarted, isLoud, soundEnded, peak, rms, lastDuration, gate);
-        _hasBlowOccured = _blowSensor.Detect(soundStarted, isLoud, soundEnded, rms, lastDuration, gate);
-        _hasSoundOccured = _hasClapOccured;
+        _sensorHandler.UpdateContext(peak, rms, brightness, _sensorContext);
 
+        //for debugging
         holdTimer -= Time.deltaTime;
         if (holdTimer <= 0f) { heldPeak = 0f; heldRms = 0f; holdTimer = 2f; }
         if (peak > heldPeak)          // new loudest moment in this 2 s window
@@ -209,21 +191,8 @@ public class ShapeSwitcher : MonoBehaviour
         heldPeak = Mathf.Max(heldPeak, peak);
         heldRms  = Mathf.Max(heldRms, rms);
 
-#if UNITY_ANDROID && !UNITY_EDITOR
-        luxMeasured = _androidLightInput.MeasureLux();
-        hasLightTrigger = _lightSensor.DetectLux(luxMeasured);
-#endif
 
-#if UNITY_WEBGL && UNITY_EDITOR
-        brightness = _webLightInput.MeasureBrightness();
-        hasLightTrigger = _lightSensor.DetectBrightness(brightness);
-#endif
 
-        _sensorContext.HasBlow = _hasBlowOccured;
-        _sensorContext.HasClap = _hasClapOccured;
-        _sensorContext.HasLight = hasLightTrigger;
-
-        
         _dispatcher.Dispatch(_sensorContext, shapes[current], _cycleNextPressed);
     }
 }
