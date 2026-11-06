@@ -45,6 +45,8 @@ public class ShapeSwitcher : MonoBehaviour
      private bool _hasClapOccured = false;
      private bool _hasBlowOccured = false;
 
+    private bool _cycleNextPressed = false;
+
 #if UNITY_ANDROID && !UNITY_EDITOR
     private AndroidLightInputHandler _androidLightInput;
     private float luxMeasured;
@@ -185,10 +187,7 @@ public class ShapeSwitcher : MonoBehaviour
         {
             Rect animationRect = new Rect(margin, shapeRect.y - height - margin, width, height);
 
-            if (GUI.Button(animationRect, cycler.CurrentState, buttonStyle))
-            {
-                cycler.Next();
-            }
+            _cycleNextPressed = GUI.Button(animationRect, cycler.CurrentState, buttonStyle);
         }
     }
 
@@ -282,6 +281,17 @@ public class ShapeSwitcher : MonoBehaviour
         else
         {
             Debug.LogWarning("[CANDLE] No CandleAnimationScript found on " + shapes[current].name);
+        }
+
+
+        AnimationCycler cycler = shapes[current].GetComponentInChildren<AnimationCycler>();
+        if (cycler != null && cycler.states.Length > 1)
+        {
+
+            if (_cycleNextPressed)
+            {
+                cycler.Next();
+            }
         }
     }
 }
