@@ -29,6 +29,7 @@ public class ShapeSwitcher : MonoBehaviour
 
     private SoundSensor _soundSensor;
     public bool _hasSoundOccured;
+
 #if (UNITY_ANDROID||UNITY_WEBGL) && !UNITY_EDITOR
      //keep value display logic for future debugging
      private LightDomainSensor _lightSensor;
@@ -171,6 +172,7 @@ public class ShapeSwitcher : MonoBehaviour
         GUILayout.Label($"is Blow: {_hasBlowOccured}");
         GUILayout.Label($"Gate: {gate:F3}");
         gate = GUILayout.HorizontalSlider(gate, 0.001f, 0.5f, GUILayout.Width(400));
+        GUILayout.Label($"Is Loud: {isLoud}");
 #endif
 
 #if UNITY_ANDROID && !UNITY_EDITOR
