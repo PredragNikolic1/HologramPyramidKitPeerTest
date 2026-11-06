@@ -27,7 +27,6 @@ public class ShapeSwitcher : MonoBehaviour
     private int current = 0;
     private GUIStyle buttonStyle;
 
-    private SoundSensor _soundSensor;
     public bool _hasSoundOccured;
 
      //keep value display logic for future debugging
@@ -72,7 +71,6 @@ public class ShapeSwitcher : MonoBehaviour
         }
         Show(0);
         SetSpinning(spinning);
-        _soundSensor = new SoundSensor(soundThreshold, soundCooldownSeconds);
         _lightSensor = new LightDomainSensor();
         _blowSensor = new BlowSensor();
 #if UNITY_ANDROID && !UNITY_EDITOR
@@ -205,12 +203,10 @@ public class ShapeSwitcher : MonoBehaviour
 
     public void RunSensor()
     {
-        if (_soundSensor == null || shapes == null || current >= shapes.Count || shapes[current] == null)
+        if (_clapSensor == null || shapes == null || current >= shapes.Count || shapes[current] == null)
         {
             return;
         }
-
-        _hasSoundOccured = _soundSensor.Sense();
 
         bool hasLightTrigger = false;
         peak = _microphoneInputHandler.MeasureLoudness();
