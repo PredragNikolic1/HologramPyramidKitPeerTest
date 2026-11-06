@@ -1,0 +1,1 @@
+Before changing code, read ARCHITECTURE.md
