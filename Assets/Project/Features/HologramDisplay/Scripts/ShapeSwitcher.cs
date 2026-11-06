@@ -40,6 +40,8 @@ public class ShapeSwitcher : MonoBehaviour
      private float lastDuration; 
      private BlowSensor _blowSensor;
      private ClapSensor _clapSensor;
+
+     private SensorDebugUI _debugUI;
      private bool _hasClapOccured = false;
      private bool _hasBlowOccured = false;
 
@@ -91,6 +93,7 @@ public class ShapeSwitcher : MonoBehaviour
         _clapSensor = new ClapSensor(0.05f);
 #endif
         _hasSoundOccured = false;
+        _debugUI = new SensorDebugUI();
     }
 
     public void Show(int index)
@@ -159,19 +162,7 @@ public class ShapeSwitcher : MonoBehaviour
         Rect shapeRect = new Rect(margin, Screen.height - height - margin, width, height);
         Rect spinRect = new Rect(Screen.width - width - margin, Screen.height - height - margin, width, height);
 
-        //keep value display logic for future debugging
-        GUI.skin.label.fontSize = 50;
-        GUILayout.Label($"Peak: {peak:F3}   (max 2s: {heldPeak:F3})");
-        GUILayout.Label($"RMS:  {rms:F3}   (max 2s: {heldRms:F3})");
-        GUILayout.Label($"Crest: {crest:F1}   (at max peak: {crestAtPeak:F1})");
-        GUILayout.Label($"Last duration: {lastDuration:F3} s");
-        GUILayout.Label($"is Clap: {_hasClapOccured}");
-        GUILayout.Label($"is Blow: {_hasBlowOccured}");
-        GUILayout.Label($"Gate: {gate:F3}");
-        gate = GUILayout.HorizontalSlider(gate, 0.001f, 0.5f, GUILayout.Width(400));
-        GUILayout.Label($"Is Loud: {isLoud}");
-        GUILayout.Label($"Brightness: {brightness}");
-
+        _debugUI.Draw(peak, heldPeak, rms, heldRms, crest, crestAtPeak, lastDuration, _hasClapOccured, _hasBlowOccured, isLoud, gate, brightness);
 #if UNITY_ANDROID && !UNITY_EDITOR
     GUILayout.Label($"Lux: {luxMeasured}");
 #endif
