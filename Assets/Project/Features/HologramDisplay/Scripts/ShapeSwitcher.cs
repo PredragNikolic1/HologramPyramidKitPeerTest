@@ -152,7 +152,7 @@ public class ShapeSwitcher : MonoBehaviour
         // Animation Button, nur für Formen mit mehreren Animationen (z.B. die Katze), über dem Shape Button
         AnimationCycler cycler = shapes[current].GetComponentInChildren<AnimationCycler>();
 
-        _debugUI.Draw(peak, heldPeak, rms, heldRms, crest, crestAtPeak, lastDuration, _hasClapOccured, _hasBlowOccured, isLoud, gate, brightness);
+        _debugUI.Draw(peak, heldPeak, rms, heldRms, crest, crestAtPeak, lastDuration, _sensorContext, gate, brightness);
 
 #if UNITY_ANDROID && !UNITY_EDITOR
     GUILayout.Label($"Lux: {luxMeasured}");
@@ -181,7 +181,7 @@ public class ShapeSwitcher : MonoBehaviour
         brightness = _webLightInput.MeasureBrightness();
 #endif
 
-        _sensorHandler.UpdateContext(peak, rms, brightness, _sensorContext);
+        _sensorHandler.UpdateContext(peak, rms, brightness, Time.time, _sensorContext);
 
         //for debugging
         holdTimer -= Time.deltaTime;

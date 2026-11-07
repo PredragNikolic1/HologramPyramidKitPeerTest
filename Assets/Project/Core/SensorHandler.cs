@@ -8,78 +8,77 @@ public class SensorHandler
     private readonly BlowSensor _blowSensor;
     private readonly LightDomainSensor _lightSensor;
 
-#if UNITY_WEBGL && !UNITY_EDITOR
-    private const float CLAP_MIN_PEAK = 0.5f;
-#endif
+    private readonly BackgroundCalibrator _calibrator;
 
-#if UNITY_WEBGL && !UNITY_EDITOR
-    private const float CLAP_MIN_PEAK = 0.05f;
-#endif
+    private const float CALIBRATION_DURATION_IN_SECONDS = 2f;
 
-#if UNITY_EDITOR
-    private const float CLAP_MIN_PEAK = 0.05f;
-#endif
+    private bool _hasCalibrationBeenRequested;
 
-    public SensorHandler(ClapSensor clapSensor, BlowSensor blowSensor, LightDomainSensor lightSensor)
+
+    public SensorHandler(ClapSensor clapSensor, BlowSensor blowSensor, LightDomainSensor lightSensor, BackgroundCalibrator calibrator)
     {
         _clapSensor = clapSensor;
         _blowSensor = blowSensor;
         _lightSensor = lightSensor;
+        _calibrator = calibrator;
+        _hasCalibrationBeenRequested = true;
     }
 
     public static SensorHandler CreateHandler()
     {
-        return new SensorHandler(new ClapSensor(CLAP_MIN_PEAK), new BlowSensor(), new LightDomainSensor());
+        return new SensorHandler(new ClapSensor(), new BlowSensor(), new LightDomainSensor(), new BackgroundCalibrator(new RmsCollector(CALIBRATION_DURATION_IN_SECONDS)));
     }
     // + background, gate, loud start, duration state
 
     // called once per frame by the orchestrator
-    public void UpdateContext(float peak, float rms, float brightness, SensorContext context)
+    public void UpdateContext(float peak, float rms, float brightness, float now, SensorContext context)
     {
-        // 1. background + ratio + gate
-        // 2. sound start/end + duration
-        // 3. sensors decide
-        // 4. write results into context
 
-        bool isLoud = false;
-        float gate = 0.17f;
 
-    //keep value display logic for future debugging
-        bool gateOpen = rms > gate;
-        bool soundStarted = false;
-        bool soundEnded = false;
-        float loudStartTime = 0.0f;
-        float lastDuration = 0.0f;
-
-        if (gateOpen && !isLoud)
+        if (!_calibrator.IsCalibrating && !_hasCalibrationBeenRequested)
         {
-            loudStartTime = Time.time;
-            isLoud = true;
-            soundStarted = true;
-        }
-        else if (!gateOpen && isLoud)
-        {
-            lastDuration = Time.time - loudStartTime;
-            isLoud = false;
-            soundEnded = true;
-        }
-        // sensors decide, every frame
-        bool hasClapOccured = _clapSensor.Detect(soundStarted, isLoud, soundEnded, peak, rms, lastDuration, gate);
-        bool hasBlowOccured = _blowSensor.Detect(soundStarted, isLoud, soundEnded, rms, lastDuration, gate);
-        bool hasLightTrigger = false;
+            // sensors decide, every frame
+            bool hasClapOccured = _clapSensor.Detect((rms / _calibrator.Background), Time.time);
+            //TODO FIX BLOW SENSOR LATER ON
+            //bool hasBlowOccured = _blowSensor.Detect(soundStarted, isLoud, soundEnded, rms, lastDuration, gate);
+            bool hasLightTrigger = false;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
         hasLightTrigger = _lightSensor.DetectLux(luxMeasured);
 #endif
 
 #if UNITY_WEBGL && UNITY_EDITOR
-        hasLightTrigger = _lightSensor.DetectBrightness(brightness);
+            hasLightTrigger = _lightSensor.DetectBrightness(brightness);
 #endif
+            context.SetToNonCalibrationContext();
+            //context.HasBlow = hasBlowOccured;
+            context.HasClap = hasClapOccured;
+            context.HasLight = hasLightTrigger;
+        }
+        else
+        {
+            context.SetToCalibrationContext();
+            RunCalibration(rms, now);
+        }
 
-        context.HasBlow = hasBlowOccured;
-        context.HasClap = hasClapOccured;
-        context.HasLight = hasLightTrigger;
 
         return;
+    }
+
+    private void RunCalibration(float rms,float now)
+    {
+        if (_hasCalibrationBeenRequested)
+        {
+            _calibrator.Start(now);
+            _hasCalibrationBeenRequested = false;
+        }
+        else
+            _calibrator.Update(rms, now);
+
+    }
+
+    public void Recalibrate()
+    {
+        _hasCalibrationBeenRequested = true;
     }
 }

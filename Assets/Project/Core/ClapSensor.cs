@@ -1,37 +1,88 @@
 ﻿using System;
-using UnityEngine;
 
 public class ClapSensor
 {
-    private const float CLAP_MAX_DURATION_IN_SECONDS = 0.07f;
-    //private const float CLAP_MIN_PEAK = 0.5f;
-    private float _clap_min_peak;
-    private float maxPeak, maxRms;
-
-    public ClapSensor(float clap_min_peak)
+    private enum SensorState
     {
-        _clap_min_peak = clap_min_peak;
+        IDLE,
+        LISTENING,
+        ECHO,
+    }
+    private const float CLAP_MAX_DURATION_IN_SECONDS = 0.15f;
+
+    private const float MIN_CLAP_ONSET_JUMP = 5.0f;
+    private const float CLAP_ECHO_MAX_DURATION_IN_SECONDS = 0.6f;
+
+
+    private const float ECHO_END_RATIO = 3f;
+
+    private SensorState _state;
+
+    private const float GATE = 15.0f;
+
+    private float _previousTime;
+
+    private float _previousRatio;
+
+    private float _peakRatio;
+
+
+    public ClapSensor()
+    { 
+        _state = SensorState.IDLE;
+        _previousRatio = 1.0f;
     }
 
+
     // call EVERY frame
-    public bool Detect(bool soundStarted, bool isLoud, bool soundEnded,
-                       float peak, float rms, float durationInSeconds, float gate)
+    public bool Detect(float ratioRmsToBackground, float currentTimeInSeconds)
     {
-        if (soundStarted)
+        bool isClap = false;
+        float listeningDuration = 0.0f;
+        switch (_state)
         {
-            maxPeak = 0f;
-            maxRms = 0f;
-        }
+            case SensorState.IDLE:
+                float onsetClapJumpRatio = ratioRmsToBackground / MathF.Max(_previousRatio, 0.0001f);
+                if ((ratioRmsToBackground >= GATE) && (onsetClapJumpRatio >= MIN_CLAP_ONSET_JUMP))
+                {
+                    _peakRatio = ratioRmsToBackground;
+                    _state = SensorState.LISTENING;
+                    _previousTime = currentTimeInSeconds;
+                }
+                break;
 
-        if (isLoud)
-        {
-            maxPeak = Mathf.Max(maxPeak, peak);
-            maxRms = Mathf.Max(maxRms, rms);
-        }
+            case SensorState.LISTENING:
+                listeningDuration = currentTimeInSeconds - _previousTime;       
+                _peakRatio = MathF.Max(_peakRatio, ratioRmsToBackground);
+                if (ratioRmsToBackground < (_peakRatio / 2))
+                {
+                    if (listeningDuration <= CLAP_MAX_DURATION_IN_SECONDS)
+                    {
+                        isClap = true;
+                        _previousTime = currentTimeInSeconds;
+                        _state = SensorState.ECHO;
+                    }
+                    else
+                    {
+                        _state = SensorState.IDLE;          // fell, but too slowly: blow or talk
+                    }
+                }
+                else if (listeningDuration > CLAP_MAX_DURATION_IN_SECONDS * 3)
+                {
+                    _state = SensorState.IDLE;              // still loud long after: give up
+                }
+                break;
 
-        return soundEnded
-            && durationInSeconds <= CLAP_MAX_DURATION_IN_SECONDS
-            && maxPeak >= _clap_min_peak
-            && maxRms >= gate;
+            case SensorState.ECHO:
+                float echoDuration = currentTimeInSeconds - _previousTime;
+                bool hasFaded = ratioRmsToBackground < ECHO_END_RATIO;
+                bool hasTimedout = echoDuration >= CLAP_ECHO_MAX_DURATION_IN_SECONDS;
+                if (hasFaded || hasTimedout)
+                    _state = SensorState.IDLE;
+                break;
+        }
+        //save the current ratio
+        _previousRatio = ratioRmsToBackground;
+        return isClap;
     }
 }
