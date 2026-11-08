@@ -2,7 +2,7 @@
 using UnityEngine;
 using UnityEngine.Android;
 
-public class AndroidMicrophoneInputHandler
+public class AndroidMicrophoneInputHandler: IMicrophoneInputHandler
 {
     private const int SAMPLE_RATE_IN_FREQUENCY_HZ = 44100;
     private const int CLIP_DURATION_IN_SECONDS = 1;
@@ -51,6 +51,16 @@ public class AndroidMicrophoneInputHandler
         }
         
 
+    }
+
+    public bool IsReady()
+    {
+        return micStartedSuccessfully;
+    }
+
+    public float GetLastRms()
+    {
+        return LastRms;
     }
 
     public float MeasureLoudness()

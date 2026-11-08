@@ -1,11 +1,10 @@
-﻿using UnityEngine;
+﻿using System;
+using UnityEngine;
 using UnityEngine.InputSystem;
 
-public class LightReaderSensor
+public class AndroidLightInputHandler
 {
-    private float _luxThreshold = 50;
-
-    public LightReaderSensor()
+    public AndroidLightInputHandler()
     {
         Debug.Log("[LIGHT] Light Sensor initialized");
         TryEnable();
@@ -26,16 +25,15 @@ public class LightReaderSensor
         return true;
     }
 
-    public bool Detect()
+    public float MeasureLux()
     {
         if (!TryEnable())
         {
             Debug.Log("[LIGHT] No LightSensor found");
-            return false;
+            return -1.0f;
         }
 
-        float lux = LightSensor.current.lightLevel.ReadValue();
-        Debug.Log("[LIGHT] lux = " + lux);
-        return lux >= _luxThreshold;
+        return LightSensor.current.lightLevel.ReadValue();
     }
+
 }
