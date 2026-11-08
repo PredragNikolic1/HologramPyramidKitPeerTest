@@ -27,6 +27,7 @@ public class SensorDebugUI
         GUILayout.Label($"is Blow: {context.HasBlow}");
         GUILayout.Label($"Gate: {gate:F3}");
         GUILayout.Label($"Brightness: {brightness}");
+        GUILayout.Label($"HasLight: {context.HasLight}");
         GUILayout.Label($"Calibrating: {context.IsCalibrating}");
     }
 }

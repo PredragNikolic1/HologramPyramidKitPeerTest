@@ -28,30 +28,28 @@ public class SensorHandler
     {
         return new SensorHandler(new ClapSensor(), new BlowSensor(), new LightDomainSensor(), new BackgroundCalibrator(new RmsCollector(CALIBRATION_DURATION_IN_SECONDS)));
     }
-    // + background, gate, loud start, duration state
 
-    // called once per frame by the orchestrator
     public void UpdateContext(float peak, float rms, float brightness, float now, SensorContext context)
     {
 
 
         if (!_calibrator.IsCalibrating && !_hasCalibrationBeenRequested)
         {
+            float rmsToBackground = (rms / _calibrator.Background);
             // sensors decide, every frame
-            bool hasClapOccured = _clapSensor.Detect((rms / _calibrator.Background), Time.time);
-            //TODO FIX BLOW SENSOR LATER ON
-            //bool hasBlowOccured = _blowSensor.Detect(soundStarted, isLoud, soundEnded, rms, lastDuration, gate);
+            bool hasClapOccured = _clapSensor.Detect(rmsToBackground, now);
+            bool hasBlowOccured = _blowSensor.Detect(rmsToBackground, now);
             bool hasLightTrigger = false;
 
 #if UNITY_ANDROID && !UNITY_EDITOR
         hasLightTrigger = _lightSensor.DetectLux(luxMeasured);
 #endif
 
-#if UNITY_WEBGL && UNITY_EDITOR
+#if (UNITY_WEBGL || UNITY_EDITOR)
             hasLightTrigger = _lightSensor.DetectBrightness(brightness);
 #endif
             context.SetToNonCalibrationContext();
-            //context.HasBlow = hasBlowOccured;
+            context.HasBlow = hasBlowOccured;
             context.HasClap = hasClapOccured;
             context.HasLight = hasLightTrigger;
         }
