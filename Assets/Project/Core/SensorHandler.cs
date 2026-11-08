@@ -47,7 +47,7 @@ public class SensorHandler
         hasLightTrigger = _lightSensor.DetectLux(luxMeasured);
 #endif
 
-#if UNITY_WEBGL && UNITY_EDITOR
+#if (UNITY_WEBGL || UNITY_EDITOR)
             hasLightTrigger = _lightSensor.DetectBrightness(brightness);
 #endif
             context.SetToNonCalibrationContext();
