@@ -137,6 +137,8 @@
   var HOST_ID_PREFIX = "hpk-";
   var HOST_ID_RANDOM_CHARS = 16;
   var HOST_ID_ALPHABET = "abcdefghijkmnpqrstuvwxyz23456789"; // 32 chars, no look-alikes (l, o, 0, 1)
+  var HOST_ID_PATTERN = /^hpk-[abcdefghijkmnpqrstuvwxyz23456789]{16}$/;
+  var SIGNALING_ERRORS = ["network", "server-error", "disconnected", "socket-error", "socket-closed"];
 
   // STUN only. PeerJS's defaults also include PeerJS's public TURN relay, which would silently
   // send our data through their server when a direct connection fails. We want to see that failure.
@@ -249,8 +251,15 @@
     }
   }
 
+  var wantWakeLock = false;
   function requestWakeLock() {
     if (!navigator.wakeLock) return;
+    if (!wantWakeLock) {
+      wantWakeLock = true;
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "visible") requestWakeLock();
+      });
+    }
     navigator.wakeLock.request("screen").then(function () {
       log("Screen wake lock on.");
     }).catch(function (e) { log("Wake lock not available: " + e.message); });
@@ -307,9 +316,9 @@
       return r.windowCount > MAX_MESSAGES_PER_SECOND;
     }
 
-    function onMessage(id, data) {
+    function onMessage(id, conn, data) {
       var r = remotes[id];
-      if (!r) return;
+      if (!r || r.conn !== conn) return;
       if (isRateLimited(r)) { r.dropped++; render(); return; }
       var msg = parseMessage(data);
       if (!msg) { r.dropped++; log("Ignored invalid message from " + r.name); render(); return; }
@@ -339,6 +348,11 @@
     }
 
     function onConnection(conn) {
+      if (remotes[conn.peer]) {
+        log("Refused a second connection from " + remotes[conn.peer].name + ".");
+        conn.on("open", function () { conn.close(); });
+        return;
+      }
       if (remoteCount() >= MAX_REMOTES) {
         log("Refused a remote: already " + MAX_REMOTES + " connected.");
         conn.on("open", function () {
@@ -368,9 +382,28 @@
           });
         }, 1000);
       });
-      conn.on("data", function (data) { onMessage(id, data); });
-      conn.on("close", function () { removeRemote(id, "closed"); });
-      conn.on("error", function (e) { log("Connection error: " + e.message); removeRemote(id, "error"); });
+      function isCurrent() { return remotes[id] && remotes[id].conn === conn; }
+      conn.on("data", function (data) { onMessage(id, conn, data); });
+      conn.on("close", function () { if (isCurrent()) removeRemote(id, "closed"); });
+      conn.on("error", function (e) {
+        log("Connection error: " + e.message);
+        if (isCurrent()) removeRemote(id, "error");
+      });
+    }
+
+    var peer = null;
+    var hosting = false;
+
+    function watchdog() {
+      var now = Date.now();
+      Object.keys(remotes).forEach(function (id) {
+        if (now - remotes[id].lastSeen > PEER_TIMEOUT_MS) {
+          var conn = remotes[id].conn;
+          removeRemote(id, "timed out");
+          conn.close();
+        }
+      });
+      if (peer && peer.disconnected && !peer.destroyed) peer.reconnect();
     }
 
     $("hostStart").onclick = function () {
@@ -378,9 +411,16 @@
       setStatus("Starting...", "", "Registering with the signaling server.");
       requestWakeLock();
 
-      var peer = new Peer(randomHostId(), PEER_OPTIONS);
+      peer = new Peer(randomHostId(), PEER_OPTIONS);
 
       peer.on("open", function (id) {
+        if (hosting) {
+          log("Signaling server reconnected.");
+          setStatus("Hosting", "ok", "Host ID " + id + ". Keep this tab open and in front.");
+          return;
+        }
+        hosting = true;
+        setInterval(watchdog, PING_INTERVAL_MS);
         var url = location.origin + location.pathname + "?join=" + encodeURIComponent(id);
         $("hostStart").hidden = true;
         $("hostInfo").hidden = false;
@@ -397,28 +437,23 @@
       });
       peer.on("connection", onConnection);
       peer.on("disconnected", function () {
+        if (!hosting || !peer || peer.destroyed) return;
         log("Lost the signaling server, reconnecting...");
-        if (!peer.destroyed) peer.reconnect();
+        peer.reconnect();
       });
       peer.on("error", function (err) {
         log("Error (" + err.type + "): " + describePeerError(err));
-        if (err.type !== "disconnected" && err.type !== "peer-unavailable") {
+        if (!hosting) {
           setStatus("Error", "bad", describePeerError(err));
+          var failed = peer;
+          peer = null;
+          failed.destroy();
           $("hostStart").disabled = false;
+        } else if (SIGNALING_ERRORS.indexOf(err.type) >= 0) {
+          setStatus("Hosting (signaling lost)", "warn",
+            "Connected remotes keep working. New remotes can't join until the server is back. Retrying...");
         }
       });
-
-      // Drop remotes that stopped sending (tab closed without a clean close, phone locked, ...).
-      setInterval(function () {
-        var now = Date.now();
-        Object.keys(remotes).forEach(function (id) {
-          if (now - remotes[id].lastSeen > PEER_TIMEOUT_MS) {
-            var conn = remotes[id].conn;
-            removeRemote(id, "timed out"); // before close(): close() fires the "closed" handler
-            conn.close();
-          }
-        });
-      }, PING_INTERVAL_MS);
     };
 
     setStatus("Not hosting", "", "Tap Start hosting, then scan the QR code with other phones on the same Wi-Fi.");
@@ -488,13 +523,16 @@
           "device-to-device traffic. Try a phone hotspot.");
       }, CONNECT_TIMEOUT_MS);
 
-      peer.on("open", function () {
-        conn = peer.connect(hostId, CONNECT_OPTIONS);
+      var thisPeer = peer;
+      thisPeer.on("open", function () {
+        var thisConn = thisPeer.connect(hostId, CONNECT_OPTIONS);
+        conn = thisConn;
 
-        conn.on("open", function () {
+        thisConn.on("open", function () {
+          if (conn !== thisConn) return;
           clearTimeout(connectTimer);
           lastPong = Date.now();
-          send(conn, { type: "hello", name: $("remoteName").value });
+          send(thisConn, { type: "hello", name: $("remoteName").value });
           log("Connected to host.");
 
           pingTimer = setInterval(function () {
@@ -503,17 +541,18 @@
               disconnected("Host lost", "bad", "The host did not answer for " + PEER_TIMEOUT_MS / 1000 + " s.");
               return;
             }
-            send(conn, { type: "ping", t: performance.now(), rtt: rtt });
+            send(thisConn, { type: "ping", t: performance.now(), rtt: rtt });
           }, PING_INTERVAL_MS);
 
           function updatePath() {
-            readPath(conn, function (path) { $("remotePath").textContent = path; });
+            readPath(thisConn, function (path) { $("remotePath").textContent = path; });
           }
           setTimeout(updatePath, 1000);
           statsTimer = setInterval(updatePath, STATS_INTERVAL_MS);
         });
 
-        conn.on("data", function (data) {
+        thisConn.on("data", function (data) {
+          if (conn !== thisConn) return;
           var msg = parseMessage(data);
           if (!msg) { log("Ignored invalid message from host."); return; }
           switch (msg.type) {
@@ -534,15 +573,17 @@
           }
         });
 
-        conn.on("close", function () {
-          if (conn) disconnected("Disconnected", "warn", "The host closed the connection.");
+        thisConn.on("close", function () {
+          if (conn === thisConn) disconnected("Disconnected", "warn", "The host closed the connection.");
         });
-        conn.on("error", function (e) { log("Connection error: " + e.message); });
+        thisConn.on("error", function (e) { log("Connection error: " + e.message); });
       });
 
-      peer.on("error", function (err) {
+      thisPeer.on("error", function (err) {
         log("Error (" + err.type + "): " + describePeerError(err));
-        if (err.type !== "disconnected") disconnected("Error", "bad", describePeerError(err));
+        if (peer !== thisPeer) return;
+        if (conn && conn.open && SIGNALING_ERRORS.indexOf(err.type) >= 0) return;
+        disconnected("Error", "bad", describePeerError(err));
       });
     }
 
@@ -568,7 +609,13 @@
     return;
   }
   var joinId = new URLSearchParams(location.search).get("join");
-  if (joinId) startRemote(joinId); else startHost();
+  if (joinId === null) {
+    startHost();
+  } else if (HOST_ID_PATTERN.test(joinId)) {
+    startRemote(joinId);
+  } else {
+    setStatus("Invalid join link", "bad", "Scan the QR code on the host again.");
+  }
 })();
 </script>
 </body>
