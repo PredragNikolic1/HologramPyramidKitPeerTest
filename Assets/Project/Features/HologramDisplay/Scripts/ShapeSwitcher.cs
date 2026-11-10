@@ -47,6 +47,10 @@ public class ShapeSwitcher : MonoBehaviour
 
     private bool _cycleNextPressed = false;
 
+    //Only set in the web build, other platforms have no remote link.
+    private RemoteLink _remoteLink;
+    private RemoteLinkUI _remoteLinkUI;
+
 #if UNITY_ANDROID && !UNITY_EDITOR
     private AndroidLightInputHandler _androidLightInput;
     private float luxMeasured;
@@ -87,6 +91,9 @@ public class ShapeSwitcher : MonoBehaviour
 #if UNITY_WEBGL && !UNITY_EDITOR
         _webLightInput = new WebLightInputHandler();
         _microphoneInputHandler = new WebMicrophoneInputHandler();
+        WebRemoteLinkPlatform remoteLinkPlatform = new WebRemoteLinkPlatform();
+        _remoteLink = new RemoteLink(remoteLinkPlatform, Application.absoluteURL, Application.streamingAssetsPath);
+        _remoteLinkUI = new RemoteLinkUI(remoteLinkPlatform);
 #endif
 
 #if UNITY_EDITOR
@@ -159,6 +166,11 @@ public class ShapeSwitcher : MonoBehaviour
 #endif
 
         _shapeSwitchUI.Draw(cycler, spinning);
+
+        if (_remoteLinkUI != null)
+        {
+            _remoteLinkUI.Draw(_remoteLink);
+        }
     }
 
     public void RunSensor()
@@ -168,8 +180,14 @@ public class ShapeSwitcher : MonoBehaviour
             return;
         }
 
+        //Messages from other devices that arrived since the last frame
+        if (_remoteLink != null)
+        {
+            _remoteLink.ProcessIncoming(Time.unscaledTime);
+        }
+
         //Measurements
-        peak = _microphoneInputHandler.MeasureLoudness();
+        peak =_microphoneInputHandler.MeasureLoudness();
         rms = _microphoneInputHandler.GetLastRms();
         crest = peak / Mathf.Max(rms, 0.0001f);
 
@@ -182,6 +200,12 @@ public class ShapeSwitcher : MonoBehaviour
 #endif
 
         _sensorHandler.UpdateContext(peak, rms, brightness, Time.time, _sensorContext);
+
+        //Host: adds what the remotes detected. Remote: sends what was just detected to the host.
+        if (_remoteLink != null)
+        {
+            _remoteLink.Apply(_sensorContext, Time.unscaledTime);
+        }
 
         //for debugging
         holdTimer -= Time.deltaTime;
