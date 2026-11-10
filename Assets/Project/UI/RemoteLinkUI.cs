@@ -1,7 +1,7 @@
 using UnityEngine;
 
-//Top right corner of the screen. On the host: the button that starts hosting, the QR code and the connected
-//remotes. On a remote: the state of the connection to the host.
+//Top right corner of the host's screen: the button that starts hosting, the QR code and the connected remotes.
+//A remote has its own screen, see RemoteDeviceUI.
 public class RemoteLinkUI
 {
     //Same button size as ShapeSwitchUI.
@@ -64,13 +64,9 @@ public class RemoteLinkUI
         {
             GUILayout.Label(link.LoadError, _labelStyle);
         }
-        else if (link.Host != null)
-        {
-            DrawHost(link, link.Host, panelWidth, height);
-        }
         else
         {
-            DrawDevice(link.Device, height);
+            DrawHost(link, link.Host, panelWidth, height);
         }
         GUILayout.EndArea();
     }
@@ -132,26 +128,6 @@ public class RemoteLinkUI
         foreach (RemoteHostSession.ConnectedRemote remote in host.Remotes)
         {
             GUILayout.Label(remote.Name + FormatRtt(remote.RttInMilliseconds), _labelStyle);
-        }
-    }
-
-    private void DrawDevice(RemoteDeviceSession device, float buttonHeight)
-    {
-        string status = device.Status;
-        if (device.State == RemoteDeviceSession.DeviceState.Connected)
-        {
-            status += FormatRtt(device.RttInMilliseconds);
-        }
-        GUILayout.Label(status, _labelStyle);
-
-        if (!string.IsNullOrEmpty(device.Hint))
-        {
-            GUILayout.Label(device.Hint, _labelStyle);
-        }
-
-        if (device.CanReconnect && GUILayout.Button("Reconnect", _buttonStyle, GUILayout.Height(buttonHeight)))
-        {
-            device.Reconnect();
         }
     }
 

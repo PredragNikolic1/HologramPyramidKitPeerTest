@@ -51,6 +51,9 @@ public class ShapeSwitcher : MonoBehaviour
     private RemoteLink _remoteLink;
     private RemoteLinkUI _remoteLinkUI;
 
+    //Only set when this device joined a host as a remote. It then shows no hologram, only the remote's buttons.
+    private RemoteDeviceUI _remoteDeviceUI;
+
 #if UNITY_ANDROID && !UNITY_EDITOR
     private AndroidLightInputHandler _androidLightInput;
     private float luxMeasured;
@@ -92,8 +95,16 @@ public class ShapeSwitcher : MonoBehaviour
         _webLightInput = new WebLightInputHandler();
         _microphoneInputHandler = new WebMicrophoneInputHandler();
         WebRemoteLinkPlatform remoteLinkPlatform = new WebRemoteLinkPlatform();
-        _remoteLink = new RemoteLink(remoteLinkPlatform, Application.absoluteURL, Application.streamingAssetsPath);
-        _remoteLinkUI = new RemoteLinkUI(remoteLinkPlatform);
+        _remoteLink = new RemoteLink(remoteLinkPlatform, Application.absoluteURL, Application.streamingAssetsPath, new ShapeSwitcherControls(this));
+        if (_remoteLink.Device != null)
+        {
+            _remoteDeviceUI = new RemoteDeviceUI();
+            RemoteScreen.HideHologram(shapes);
+        }
+        else
+        {
+            _remoteLinkUI = new RemoteLinkUI(remoteLinkPlatform);
+        }
 #endif
 
 #if UNITY_EDITOR
@@ -144,6 +155,11 @@ public class ShapeSwitcher : MonoBehaviour
         }
     }
 
+    public GameObject GetCurrentShape()
+    {
+        return (shapes == null || current >= shapes.Count) ? null : shapes[current];
+    }
+
     public string getCurrentShapeName()
     {
         return shapes[current].name;
@@ -151,6 +167,12 @@ public class ShapeSwitcher : MonoBehaviour
 
     void OnGUI()
     {
+        if (_remoteDeviceUI != null)
+        {
+            _remoteDeviceUI.Draw(_remoteLink);
+            return;
+        }
+
         if (shapes == null || shapes.Count == 0 || current >= shapes.Count || shapes[current] == null)
         {
             return;
@@ -217,6 +239,10 @@ public class ShapeSwitcher : MonoBehaviour
 
 
 
-        _dispatcher.Dispatch(_sensorContext, shapes[current], _cycleNextPressed);
+        //A remote has no shapes on screen that could react, its results went to the host above.
+        if (_remoteDeviceUI == null)
+        {
+            _dispatcher.Dispatch(_sensorContext, shapes[current], _cycleNextPressed);
+        }
     }
 }

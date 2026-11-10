@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 
-//Host side of the remote link: accepts remotes and merges what they detect into the host's SensorContext.
+//Host side of the remote link: accepts remotes, merges what they detect into the host's SensorContext,
+//runs their commands and tells them what the hologram shows.
 public class RemoteHostSession : IRemoteSession
 {
     public enum HostState { NotHosting, Starting, Hosting }
@@ -26,10 +27,16 @@ public class RemoteHostSession : IRemoteSession
 
     private readonly IRemoteLinkPlatform _platform;
     private readonly string _pageUrl;
+    private readonly IHologramControls _controls;
     private readonly Dictionary<string, ConnectedRemote> _remotes = new Dictionary<string, ConnectedRemote>();
     private readonly List<string> _timedOut = new List<string>();
     private bool _isReady;
     private int _nextRemoteNumber = 1;
+
+    //The state the remotes know, sent again when it changes.
+    private string _sentShape;
+    private bool _sentSpin;
+    private string _sentAnimation;
 
     public HostState State { get; private set; } = HostState.NotHosting;
 
@@ -44,10 +51,11 @@ public class RemoteHostSession : IRemoteSession
 
     public IReadOnlyCollection<ConnectedRemote> Remotes => _remotes.Values;
 
-    public RemoteHostSession(IRemoteLinkPlatform platform, string pageUrl)
+    public RemoteHostSession(IRemoteLinkPlatform platform, string pageUrl, IHologramControls controls)
     {
         _platform = platform;
         _pageUrl = pageUrl;
+        _controls = controls;
     }
 
     public void OnReady()
@@ -121,6 +129,8 @@ public class RemoteHostSession : IRemoteSession
             _remotes.Remove(peerId);
             _platform.Close(peerId, 0);
         }
+
+        SendStateIfChanged();
     }
 
     //Remote input goes into the same context as local input: a clap on any device is a clap.
@@ -156,6 +166,56 @@ public class RemoteHostSession : IRemoteSession
             RateWindowStart = now
         };
         _platform.Send(peerId, RemoteMessage.Create(RemoteMessage.WELCOME).ToJson());
+        _platform.Send(peerId, CreateState().ToJson());
+    }
+
+    //The remotes' buttons show what the host shows, whoever changed it.
+    private void SendStateIfChanged()
+    {
+        if (_remotes.Count == 0)
+        {
+            return;
+        }
+
+        RemoteMessage state = CreateState();
+        if (state.shape == _sentShape && state.spin == _sentSpin && state.animation == _sentAnimation)
+        {
+            return;
+        }
+        _sentShape = state.shape;
+        _sentSpin = state.spin;
+        _sentAnimation = state.animation;
+
+        string json = state.ToJson();
+        foreach (string peerId in _remotes.Keys)
+        {
+            _platform.Send(peerId, json);
+        }
+    }
+
+    private RemoteMessage CreateState()
+    {
+        RemoteMessage state = RemoteMessage.Create(RemoteMessage.STATE);
+        state.shape = _controls.CurrentShapeName;
+        state.spin = _controls.IsSpinning;
+        state.animation = _controls.CurrentAnimationName;
+        return state;
+    }
+
+    private void RunCommand(RemoteMessage message)
+    {
+        switch (message.command)
+        {
+            case RemoteMessage.NEXT_SHAPE:
+                _controls.NextShape();
+                break;
+            case RemoteMessage.SET_SPIN:
+                _controls.SetSpinning(message.spin);
+                break;
+            case RemoteMessage.NEXT_ANIMATION:
+                _controls.NextAnimation();
+                break;
+        }
     }
 
     private void HandleMessage(string peerId, string json, float now)
@@ -189,6 +249,10 @@ public class RemoteHostSession : IRemoteSession
                 remote.PendingClap |= message.clap;
                 remote.PendingBlow |= message.blow;
                 remote.HasLight = message.light;
+                break;
+
+            case RemoteMessage.COMMAND:
+                RunCommand(message);
                 break;
         }
     }

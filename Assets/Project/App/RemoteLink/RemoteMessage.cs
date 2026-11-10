@@ -11,6 +11,13 @@ public class RemoteMessage
     public const string SENSOR = "sensor";     // remote -> host: seq, clap, blow, light
     public const string PING = "ping";         // remote -> host: t, rtt
     public const string PONG = "pong";         // host -> remote: t of the ping
+    public const string COMMAND = "command";   // remote -> host: command (and spin for SET_SPIN)
+    public const string STATE = "state";       // host -> remote: shape, spin, animation
+
+    //Commands a remote can give, they do the same as the buttons on the host.
+    public const string NEXT_SHAPE = "nextShape";
+    public const string SET_SPIN = "setSpin";
+    public const string NEXT_ANIMATION = "nextAnimation";
 
     public const float UNKNOWN_RTT = -1f;
 
@@ -24,6 +31,13 @@ public class RemoteMessage
     public bool clap;
     public bool blow;
     public bool light;
+
+    public string command;
+
+    //What the host shows right now. animation is empty if the shape has no animations to switch between.
+    public string shape;
+    public bool spin;
+    public string animation;
 
     //Send time of a ping in milliseconds, the pong returns it unchanged.
     public double t;
@@ -73,6 +87,13 @@ public class RemoteMessage
             case PING:
             case PONG:
                 return double.IsNaN(message.t) || double.IsInfinity(message.t) ? null : message;
+            case COMMAND:
+                bool isKnown = message.command == NEXT_SHAPE || message.command == SET_SPIN || message.command == NEXT_ANIMATION;
+                return isKnown ? message : null;
+            case STATE:
+                message.shape = RemoteProtocol.CleanText(message.shape, "");
+                message.animation = RemoteProtocol.CleanText(message.animation, "");
+                return message;
             case WELCOME:
             case FULL:
             case SENSOR:

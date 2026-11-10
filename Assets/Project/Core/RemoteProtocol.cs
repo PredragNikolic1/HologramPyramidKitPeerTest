@@ -110,12 +110,17 @@ public static class RemoteProtocol
         return null;
     }
 
-    //Names come from other devices: cut to the allowed length and without control characters.
     public static string CleanName(string name)
+    {
+        return CleanText(name, DEFAULT_NAME);
+    }
+
+    //Texts come from other devices: cut to the allowed length and without control characters.
+    public static string CleanText(string name, string fallback)
     {
         if (name == null)
         {
-            return DEFAULT_NAME;
+            return fallback;
         }
 
         StringBuilder clean = new StringBuilder();
@@ -130,7 +135,7 @@ public static class RemoteProtocol
                 clean.Append(c);
             }
         }
-        return clean.Length > 0 ? clean.ToString() : DEFAULT_NAME;
+        return clean.Length > 0 ? clean.ToString() : fallback;
     }
 
     //True for errors that only concern the signaling server. Open connections keep working through them.

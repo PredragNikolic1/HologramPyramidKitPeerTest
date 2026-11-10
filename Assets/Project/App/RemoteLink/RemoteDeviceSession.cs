@@ -1,5 +1,7 @@
-//Remote side of the remote link: this device joined a host through its QR code and sends it what its own
-//sensors detect. It never changes its own SensorContext.
+using System.Collections.Generic;
+
+//Remote side of the remote link: this device joined a host through its QR code. It sends the host what its own
+//sensors detect and the commands from its buttons. It never changes its own SensorContext.
 public class RemoteDeviceSession : IRemoteSession
 {
     public enum DeviceState { Loading, Connecting, Connected, Failed }
@@ -8,9 +10,16 @@ public class RemoteDeviceSession : IRemoteSession
     private const int NAME_NUMBER_MIN = 10;
     private const int NAME_NUMBER_COUNT = 90;
 
+    //A tap on the manual light button counts as light for this long, enough for the host to see it.
+    private const float MANUAL_LIGHT_IN_SECONDS = 0.5f;
+
+    //Taps that are waiting to be sent. More than a few can only pile up while the connection is stuck.
+    private const int MAX_QUEUED_COMMANDS = 8;
+
     private readonly IRemoteLinkPlatform _platform;
     private readonly string _hostId;
     private readonly bool _isHostIdValid;
+    private readonly List<RemoteMessage> _queuedCommands = new List<RemoteMessage>();
 
     private bool _connectRequested;
     private bool _isChannelOpen;
@@ -25,6 +34,11 @@ public class RemoteDeviceSession : IRemoteSession
     private bool _lastSentLight;
     private float _lastSensorSendTime;
 
+    private bool _manualClap;
+    private bool _manualBlow;
+    private bool _manualLight;
+    private float _manualLightEndTime = float.NegativeInfinity;
+
     public DeviceState State { get; private set; } = DeviceState.Loading;
 
     public string Name { get; private set; }
@@ -37,6 +51,16 @@ public class RemoteDeviceSession : IRemoteSession
     public bool CanReconnect => State == DeviceState.Failed && _isHostIdValid;
 
     public float RttInMilliseconds => _rttInMilliseconds;
+
+    //What the host's hologram shows, as last reported by the host.
+    public string HostShapeName { get; private set; } = "";
+    public bool IsHostSpinning { get; private set; }
+    public string HostAnimationName { get; private set; } = "";
+
+    //When this device last detected (or manually triggered) each input, on the clock passed to Apply.
+    public float LastClapTime { get; private set; } = float.NegativeInfinity;
+    public float LastBlowTime { get; private set; } = float.NegativeInfinity;
+    public float LastLightTime { get; private set; } = float.NegativeInfinity;
 
     public RemoteDeviceSession(IRemoteLinkPlatform platform, string hostId)
     {
@@ -66,6 +90,37 @@ public class RemoteDeviceSession : IRemoteSession
         {
             _connectRequested = true;
         }
+    }
+
+    //The buttons only note what was tapped. It is sent in the next Apply, like everything else.
+    public void RequestNextShape()
+    {
+        QueueCommand(RemoteMessage.NEXT_SHAPE, false);
+    }
+
+    public void RequestSetSpinning(bool value)
+    {
+        QueueCommand(RemoteMessage.SET_SPIN, value);
+    }
+
+    public void RequestNextAnimation()
+    {
+        QueueCommand(RemoteMessage.NEXT_ANIMATION, false);
+    }
+
+    public void TriggerClap()
+    {
+        _manualClap = true;
+    }
+
+    public void TriggerBlow()
+    {
+        _manualBlow = true;
+    }
+
+    public void TriggerLight()
+    {
+        _manualLight = true;
     }
 
     public void HandleEvent(PeerEvent peerEvent, float now)
@@ -145,18 +200,41 @@ public class RemoteDeviceSession : IRemoteSession
 
     public void Apply(SensorContext context, float now)
     {
+        //Manual taps count exactly like the real sensors.
+        if (_manualLight)
+        {
+            _manualLightEndTime = now + MANUAL_LIGHT_IN_SECONDS;
+        }
+        bool hasClap = context.HasClap || _manualClap;
+        bool hasBlow = context.HasBlow || _manualBlow;
+        bool hasLight = context.HasLight || now < _manualLightEndTime;
+        _manualClap = false;
+        _manualBlow = false;
+        _manualLight = false;
+
+        if (hasClap) LastClapTime = now;
+        if (hasBlow) LastBlowTime = now;
+        if (hasLight) LastLightTime = now;
+
         if (State != DeviceState.Connected)
         {
             _pendingClap = false;
             _pendingBlow = false;
+            _queuedCommands.Clear();
             return;
         }
 
-        //A clap lasts one frame but messages are sent less often, so it is remembered until the next one goes out.
-        _pendingClap |= context.HasClap;
-        _pendingBlow |= context.HasBlow;
+        foreach (RemoteMessage command in _queuedCommands)
+        {
+            Send(command);
+        }
+        _queuedCommands.Clear();
 
-        bool hasNews = _pendingClap || _pendingBlow || context.HasLight != _lastSentLight;
+        //A clap lasts one frame but messages are sent less often, so it is remembered until the next one goes out.
+        _pendingClap |= hasClap;
+        _pendingBlow |= hasBlow;
+
+        bool hasNews = _pendingClap || _pendingBlow || hasLight != _lastSentLight;
         bool maySend = now - _lastSensorSendTime >= RemoteProtocol.MIN_SENSOR_SEND_INTERVAL_IN_SECONDS;
         if (!hasNews || !maySend)
         {
@@ -167,13 +245,26 @@ public class RemoteDeviceSession : IRemoteSession
         message.seq = ++_sequence;
         message.clap = _pendingClap;
         message.blow = _pendingBlow;
-        message.light = context.HasLight;
+        message.light = hasLight;
         Send(message);
 
         _pendingClap = false;
         _pendingBlow = false;
-        _lastSentLight = context.HasLight;
+        _lastSentLight = hasLight;
         _lastSensorSendTime = now;
+    }
+
+    private void QueueCommand(string command, bool spin)
+    {
+        if (State != DeviceState.Connected || _queuedCommands.Count >= MAX_QUEUED_COMMANDS)
+        {
+            return;
+        }
+
+        RemoteMessage message = RemoteMessage.Create(RemoteMessage.COMMAND);
+        message.command = command;
+        message.spin = spin;
+        _queuedCommands.Add(message);
     }
 
     private void StartConnecting(float now)
@@ -201,7 +292,7 @@ public class RemoteDeviceSession : IRemoteSession
             case RemoteMessage.WELCOME:
                 State = DeviceState.Connected;
                 Status = "Connected as " + Name;
-                Hint = "Clap, blow or shine a light on this device. The host's hologram reacts.";
+                Hint = "";
                 _platform.KeepScreenOn();
                 break;
 
@@ -212,6 +303,12 @@ public class RemoteDeviceSession : IRemoteSession
             case RemoteMessage.PONG:
                 _lastPongTime = now;
                 _rttInMilliseconds = (float)((double)now * SECONDS_TO_MILLISECONDS - message.t);
+                break;
+
+            case RemoteMessage.STATE:
+                HostShapeName = message.shape;
+                IsHostSpinning = message.spin;
+                HostAnimationName = message.animation;
                 break;
         }
     }

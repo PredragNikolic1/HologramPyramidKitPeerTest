@@ -1,8 +1,8 @@
 //Lets other devices act as extra sensors for this hologram, over a direct browser-to-browser connection.
 //
 //Opened normally, the device is the host: it shows a QR code and merges what the remotes detect into its own
-//SensorContext. Opened through that QR code (?join=<hostId>), the device is a remote: it runs its own sensors
-//and sends the results to the host.
+//SensorContext. Opened through that QR code (?join=<hostId>), the device is a remote: it shows no hologram,
+//runs its own sensors and sends the results to the host, and has buttons that control the host's hologram.
 //
 //Called from RunSensor(): ProcessIncoming at the start of the frame, Apply after the local sensors.
 public class RemoteLink
@@ -25,14 +25,14 @@ public class RemoteLink
     //Set when the libraries could not be loaded, null otherwise.
     public string LoadError { get; private set; }
 
-    public RemoteLink(IRemoteLinkPlatform platform, string pageUrl, string streamingAssetsUrl)
+    public RemoteLink(IRemoteLinkPlatform platform, string pageUrl, string streamingAssetsUrl, IHologramControls controls)
     {
         _platform = platform;
 
         string joinId = RemoteProtocol.ReadJoinId(pageUrl);
         if (joinId == null)
         {
-            Host = new RemoteHostSession(platform, pageUrl);
+            Host = new RemoteHostSession(platform, pageUrl, controls);
             _session = Host;
         }
         else
